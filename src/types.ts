@@ -20,6 +20,12 @@ export interface ActionConfig {
   columns: number;
   rows: number;
   jumpMidPoint?: number; // Special for jump
+  hitbox?: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
 }
 
 export interface GameParams {

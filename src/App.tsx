@@ -31,8 +31,103 @@ const DEFAULT_ACTION_CONFIG = (type: ActionType): ActionConfig => ({
   spriteSheetUrl: null,
   columns: 1,
   rows: 1,
+  hitbox: { x: 0, y: 0, width: 150, height: 200 },
   ...(type === 'jump' ? { jumpMidPoint: 1 } : {})
 });
+
+// --- Components ---
+
+const HitboxOverlay = ({ hitbox, frame, scale, onUpdate }: { 
+  hitbox: { x: number, y: number, width: number, height: number },
+  frame: { width: number, height: number },
+  scale: number,
+  onUpdate: (h: { x: number, y: number, width: number, height: number }) => void
+}) => {
+  const [dragging, setDragging] = useState<string | null>(null);
+  const startPos = useRef({ x: 0, y: 0 });
+  const startHitbox = useRef(hitbox);
+
+  const onMouseDown = (e: React.MouseEvent, edge: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragging(edge);
+    startPos.current = { x: e.clientX, y: e.clientY };
+    startHitbox.current = { ...hitbox };
+  };
+
+  useEffect(() => {
+    if (!dragging) return;
+
+    const onMouseMove = (e: MouseEvent) => {
+      const dx = (e.clientX - startPos.current.x) / scale;
+      const dy = (e.clientY - startPos.current.y) / scale;
+      
+      const newHitbox = { ...startHitbox.current };
+      
+      if (dragging === 'left') {
+        newHitbox.x = startHitbox.current.x + dx;
+        newHitbox.width = startHitbox.current.width - dx;
+      } else if (dragging === 'right') {
+        newHitbox.width = startHitbox.current.width + dx;
+      } else if (dragging === 'top') {
+        newHitbox.y = startHitbox.current.y + dy;
+        newHitbox.height = startHitbox.current.height - dy;
+      } else if (dragging === 'bottom') {
+        newHitbox.height = startHitbox.current.height + dy;
+      }
+      
+      onUpdate(newHitbox);
+    };
+
+    const onMouseUp = () => setDragging(null);
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+  }, [dragging, scale, onUpdate]);
+
+  const rectLeft = (-frame.width / 2 + hitbox.x) * scale;
+  const rectTop = (-frame.height / 2 + hitbox.y) * scale;
+  const rectWidth = hitbox.width * scale;
+  const rectHeight = hitbox.height * scale;
+
+  return (
+    <div 
+      className="absolute pointer-events-none"
+      style={{
+        left: '50%',
+        top: '50%',
+        width: rectWidth,
+        height: rectHeight,
+        transform: `translate(${rectLeft}px, ${rectTop}px)`,
+        border: '2px solid #f97316', // orange-500
+        boxShadow: '0 0 0 1px rgba(0,0,0,0.5)',
+        zIndex: 50
+      }}
+    >
+      {/* Drag Handles */}
+      <div 
+        onMouseDown={(e) => onMouseDown(e, 'left')}
+        className="absolute left-0 top-0 bottom-0 w-2 -ml-1 cursor-ew-resize pointer-events-auto hover:bg-orange-500/30"
+      />
+      <div 
+        onMouseDown={(e) => onMouseDown(e, 'right')}
+        className="absolute right-0 top-0 bottom-0 w-2 -mr-1 cursor-ew-resize pointer-events-auto hover:bg-orange-500/30"
+      />
+      <div 
+        onMouseDown={(e) => onMouseDown(e, 'top')}
+        className="absolute top-0 left-0 right-0 h-2 -mt-1 cursor-ns-resize pointer-events-auto hover:bg-orange-500/30"
+      />
+      <div 
+        onMouseDown={(e) => onMouseDown(e, 'bottom')}
+        className="absolute bottom-0 left-0 right-0 h-2 -mb-1 cursor-ns-resize pointer-events-auto hover:bg-orange-500/30"
+      />
+    </div>
+  );
+};
 
 export default function App() {
   // --- State ---
@@ -360,6 +455,7 @@ export default function App() {
         rows: rows, 
         frames: newFrames,
         maxFrames: maxFrames,
+        hitbox: { x: 0, y: 0, width: frameWidth, height: frameHeight },
         ...(type === 'jump' ? { jumpMidPoint: Math.floor(maxFrames / 2) } : {})
       });
     };
@@ -383,8 +479,8 @@ export default function App() {
     if (displayFrames.length === 0) {
       const placeholder = (
         <div 
-          className="bg-orange-500 border-2 border-orange-600 rounded-sm" 
-          style={{ width: 64, height: 200 }}
+          className="border-2 border-orange-500 border-dashed rounded-sm" 
+          style={{ width: 150, height: 200 }}
         />
       );
       if (fixedSize) {
@@ -622,7 +718,7 @@ export default function App() {
               className="flex-1 relative bg-[#050507]"
             >
               {/* Game Map Background */}
-              <div className="absolute inset-0 flex items-end justify-center" style={{ paddingBottom: `${128 - gameParams.horizonOffset}px` }}>
+              <div className="absolute inset-0 flex items-center justify-center">
                 <div 
                   className="relative w-full h-full bg-center bg-cover bg-no-repeat transition-all duration-500"
                   style={{ backgroundImage: `url(${ASSETS_BASE_URL}bg1.png)` }}
@@ -638,6 +734,33 @@ export default function App() {
                 }}
               >
                 {renderSprite(charState, currentFrameIndex, 1, charDir, false, 256 * gameParams.charScale)}
+                
+                {/* Hitbox Overlay */}
+                {actions['idle'].spriteSheetUrl && actions['idle'].hitbox && (
+                  <HitboxOverlay 
+                    hitbox={actions['idle'].hitbox!}
+                    frame={actions['idle'].frames[0] || { width: 150, height: 200 }}
+                    scale={(256 * gameParams.charScale) / Math.max(
+                      actions['idle'].frames[0]?.width || 150,
+                      actions['idle'].frames[0]?.height || 200
+                    )}
+                    onUpdate={(newHitbox) => {
+                      const idleFrame = actions['idle'].frames[0] || { width: 150, height: 200 };
+                      // Clamp hitbox to frame dimensions
+                      const clamped = {
+                        x: Math.max(0, Math.min(idleFrame.width, newHitbox.x)),
+                        y: Math.max(0, Math.min(idleFrame.height, newHitbox.y)),
+                        width: Math.max(0, Math.min(idleFrame.width - Math.max(0, newHitbox.x), newHitbox.width)),
+                        height: Math.max(0, Math.min(idleFrame.height - Math.max(0, newHitbox.y), newHitbox.height))
+                      };
+                      // Re-adjust x/y if width/height were clamped by bounds
+                      clamped.x = Math.max(0, Math.min(idleFrame.width - clamped.width, clamped.x));
+                      clamped.y = Math.max(0, Math.min(idleFrame.height - clamped.height, clamped.y));
+
+                      updateAction('idle', { hitbox: clamped });
+                    }}
+                  />
+                )}
                 
                 {/* Debug Info */}
                 <div className="absolute -top-12 left-1/2 -translate-x-1/2 whitespace-nowrap bg-black/80 px-2 py-1 rounded text-[10px] font-mono border border-white/10">
