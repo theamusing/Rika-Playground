@@ -1,6 +1,6 @@
 import { Type } from "@google/genai";
 
-export type ActionType = 'idle' | 'walk' | 'run' | 'attack' | 'jump' | 'hit';
+export type ActionType = 'idle' | 'walk' | 'run' | 'attack' | 'jump' | 'hit' | 'special1' | 'special2' | 'special3' | 'special4';
 
 export interface Frame {
   id: number;
@@ -20,6 +20,7 @@ export interface ActionConfig {
   columns: number;
   rows: number;
   jumpMidPoint?: number; // Special for jump
+  speed?: number; // Special for special actions
   hitbox?: {
     x: number;
     y: number;
@@ -35,4 +36,5 @@ export interface GameParams {
   gravity: number;
   charScale: number;
   horizonOffset: number;
+  showCollisionBox: boolean;
 }

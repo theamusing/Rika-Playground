@@ -19,13 +19,83 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   PanelRightClose,
-  PanelRightOpen
+  PanelRightOpen,
+  Image as ImageIcon,
+  Check,
+  Languages
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ActionType, ActionConfig, Frame, GameParams } from './types';
 
-const INITIAL_ACTIONS: ActionType[] = ['idle', 'walk', 'run', 'attack', 'jump', 'hit'];
+const INITIAL_ACTIONS: ActionType[] = ['idle', 'walk', 'run', 'attack', 'jump', 'hit', 'special1', 'special2', 'special3', 'special4'];
 const ASSETS_BASE_URL = 'https://cdn.rika-ai.com/assets/frontpage/examples/';
+
+const TRANSLATIONS = {
+  en: {
+    parameters: "Parameters",
+    spriteSheet: "Sprite Sheet",
+    splitting: "Splitting",
+    columns: "Columns",
+    rows: "Rows",
+    frameCount: "Frame Count",
+    movementSpeed: "Movement Speed",
+    pausePreview: "PAUSE PREVIEW",
+    playPreview: "PLAY PREVIEW",
+    characterParams: "Character Params",
+    displayScale: "Display Scale",
+    horizonOffset: "Horizon Offset",
+    showCollisionBox: "Show Collision Box",
+    physicsParams: "Physics Params",
+    walkSpeed: "Walk Speed",
+    runSpeed: "Run Speed",
+    jumpPower: "Jump Power",
+    gravity: "Gravity",
+    backgroundSelection: "Background Selection",
+    clickToUpload: "Click to upload",
+    totalFrames: "total frames",
+    frameSequence: "Frame Sequence",
+    editor: "Editor",
+    configureSprite: "Configure your sprite sheet and frame sequence",
+    special: "Special:",
+    jump: "Jump",
+    run: "Run",
+    attack: "Attack",
+    hit: "Hit",
+    jumpMid: "MID"
+  },
+  zh: {
+    parameters: "参数",
+    spriteSheet: "精灵图",
+    splitting: "切分",
+    columns: "列数",
+    rows: "行数",
+    frameCount: "帧数",
+    movementSpeed: "移动速度",
+    pausePreview: "暂停预览",
+    playPreview: "播放预览",
+    characterParams: "角色参数",
+    displayScale: "显示比例",
+    horizonOffset: "地平线偏移",
+    showCollisionBox: "显示碰撞盒",
+    physicsParams: "物理参数",
+    walkSpeed: "行走速度",
+    runSpeed: "跑步速度",
+    jumpPower: "跳跃力度",
+    gravity: "重力",
+    backgroundSelection: "背景选择",
+    clickToUpload: "点击上传",
+    totalFrames: "总帧数",
+    frameSequence: "帧序列",
+    editor: "编辑器",
+    configureSprite: "配置您的精灵图和帧序列",
+    special: "特殊:",
+    jump: "跳跃",
+    run: "跑步",
+    attack: "攻击",
+    hit: "受击",
+    jumpMid: "中点"
+  }
+};
 
 const DEFAULT_ACTION_CONFIG = (type: ActionType): ActionConfig => ({
   type,
@@ -36,7 +106,8 @@ const DEFAULT_ACTION_CONFIG = (type: ActionType): ActionConfig => ({
   columns: 1,
   rows: 1,
   hitbox: { x: 0, y: 0, width: 150, height: 200 },
-  ...(type === 'jump' ? { jumpMidPoint: 1 } : {})
+  ...(type === 'jump' ? { jumpMidPoint: 1 } : {}),
+  ...(type.startsWith('special') ? { speed: 0 } : {})
 });
 
 // --- Components ---
@@ -153,7 +224,8 @@ export default function App() {
     jumpVelocity: -15,
     gravity: 0.8,
     charScale: 1,
-    horizonOffset: 60
+    horizonOffset: 60,
+    showCollisionBox: true
   });
 
   // Character State
@@ -176,6 +248,25 @@ export default function App() {
   const [currentFrameIndex, setCurrentFrameIndex] = useState(0);
   const [editorFrameIndex, setEditorFrameIndex] = useState(0);
   const [jumpPhase, setJumpPhase] = useState<'start' | 'mid' | 'end'>('start');
+  const [bgDimensions, setBgDimensions] = useState({ width: 0, height: 0 });
+  const bgDimensionsRef = useRef({ width: 0, height: 0 });
+  const [cameraX, setCameraX] = useState(0);
+  const cameraXRef = useRef(0);
+  const [currentBg, setCurrentBg] = useState('bg3.png');
+  const [activeKeys, setActiveKeys] = useState<Set<string>>(new Set());
+  const [language, setLanguage] = useState<'en' | 'zh'>('en');
+
+  const t = TRANSLATIONS[language];
+
+  // Load background dimensions
+  useEffect(() => {
+    const img = new Image();
+    img.onload = () => {
+      setBgDimensions({ width: img.width, height: img.height });
+      bgDimensionsRef.current = { width: img.width, height: img.height };
+    };
+    img.src = `${ASSETS_BASE_URL}${currentBg}`;
+  }, [currentBg]);
 
   // Keep refs in sync with state
   useEffect(() => { gameParamsRef.current = gameParams; }, [gameParams]);
@@ -223,7 +314,7 @@ export default function App() {
               currentFrameIndexRef.current += 1;
             }
           }
-        } else if (stateToAnimate === 'attack' || stateToAnimate === 'hit') {
+        } else if (stateToAnimate === 'attack' || stateToAnimate === 'hit' || stateToAnimate.startsWith('special')) {
           if (currentFrameIndexRef.current < charActiveFrames.length - 1) {
             currentFrameIndexRef.current += 1;
           }
@@ -275,6 +366,10 @@ export default function App() {
       const isJumping = keys.has(' ') && !prevKeys.has(' ');
       const isAttacking = keys.has('j') && !prevKeys.has('j');
       const isHitting = keys.has('h') && !prevKeys.has('h');
+      const isSpecial1 = keys.has('1') && !prevKeys.has('1');
+      const isSpecial2 = keys.has('2') && !prevKeys.has('2');
+      const isSpecial3 = keys.has('3') && !prevKeys.has('3');
+      const isSpecial4 = keys.has('4') && !prevKeys.has('4');
 
       const currentState = charStateRef.current;
       let nextState: ActionType = currentState;
@@ -297,11 +392,19 @@ export default function App() {
         nextState = 'jump';
         charVelRef.current.y = gameParamsRef.current.jumpVelocity;
         isGroundedRef.current = false;
-      } else if (currentState === 'attack') {
+      } else if (currentState === 'attack' || currentState.startsWith('special')) {
         if (isAnimFinished) nextState = 'idle';
-        else nextState = 'attack';
+        else nextState = currentState;
       } else if (isAttacking) {
         nextState = 'attack';
+      } else if (isSpecial1) {
+        nextState = 'special1';
+      } else if (isSpecial2) {
+        nextState = 'special2';
+      } else if (isSpecial3) {
+        nextState = 'special3';
+      } else if (isSpecial4) {
+        nextState = 'special4';
       } else if (isMovingLeft || isMovingRight) {
         nextState = isRunning ? 'run' : 'walk';
       } else {
@@ -325,6 +428,7 @@ export default function App() {
       setCharState(nextState);
       setIsGrounded(isGroundedRef.current);
 
+      // Update direction (even during special actions if keys are pressed)
       if (isMovingLeft) setCharDir(-1);
       if (isMovingRight) setCharDir(1);
 
@@ -343,6 +447,10 @@ export default function App() {
         
         if (isMovingLeft) targetVx = -speed;
         if (isMovingRight) targetVx = speed;
+      } else if (nextState.startsWith('special')) {
+        const specialConfig = actionsRef.current[nextState];
+        if (isMovingLeft) targetVx = -(specialConfig.speed || 0);
+        if (isMovingRight) targetVx = (specialConfig.speed || 0);
       }
 
       // Use a factor to normalize speed (assuming ~60fps)
@@ -359,15 +467,30 @@ export default function App() {
       charPosRef.current.x += charVelRef.current.x * timeScale;
       charPosRef.current.y += charVelRef.current.y * timeScale;
 
-      // Screen clamping
-      if (gameContainerRef.current) {
-        const rect = gameContainerRef.current.getBoundingClientRect();
-        const halfWidth = rect.width / 2;
-        // Clamp charPosRef.current.x between -halfWidth and halfWidth
-        // We can add a small margin so the character doesn't disappear completely
-        const margin = 20; 
-        charPosRef.current.x = Math.max(-halfWidth + margin, Math.min(halfWidth - margin, charPosRef.current.x));
+      // --- Scrolling & Clamping Logic ---
+      const screenWidth = window.innerWidth;
+      const screenHeight = window.innerHeight;
+      
+      // Calculate background width scaled to screen height
+      let bgWidth = 0;
+      if (bgDimensionsRef.current.height > 0) {
+        bgWidth = (bgDimensionsRef.current.width / bgDimensionsRef.current.height) * screenHeight;
       }
+
+      const maxCameraX = Math.max(0, (bgWidth - screenWidth) / 2);
+      const halfBgWidth = bgWidth / 2;
+
+      // Clamp character to background boundaries
+      charPosRef.current.x = Math.max(-halfBgWidth, Math.min(halfBgWidth, charPosRef.current.x));
+
+      // Scrolling logic:
+      // Try to keep character at screen center (screenX = 0)
+      // screenX = worldX - cameraX
+      // So cameraX = worldX
+      let targetCameraX = charPosRef.current.x;
+      
+      // Clamp cameraX to background edges relative to screen
+      cameraXRef.current = Math.max(-maxCameraX, Math.min(maxCameraX, targetCameraX));
 
       // Ground check
       if (charPosRef.current.y >= 0) {
@@ -388,6 +511,7 @@ export default function App() {
       // Sync to state for rendering
       setCharPos({ ...charPosRef.current });
       setCharVel({ ...charVelRef.current });
+      setCameraX(cameraXRef.current);
 
       // Landing logic for jump animation
       // User: "当距离地面小于一个值且已经播放到mid时，继续播放后面的帧直到结束"
@@ -409,8 +533,16 @@ export default function App() {
 
   // --- Event Handlers ---
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => keysPressed.current.add(e.key.toLowerCase());
-    const handleKeyUp = (e: KeyboardEvent) => keysPressed.current.delete(e.key.toLowerCase());
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const key = e.key.toLowerCase();
+      keysPressed.current.add(key);
+      setActiveKeys(new Set(keysPressed.current));
+    };
+    const handleKeyUp = (e: KeyboardEvent) => {
+      const key = e.key.toLowerCase();
+      keysPressed.current.delete(key);
+      setActiveKeys(new Set(keysPressed.current));
+    };
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
     return () => {
@@ -558,27 +690,39 @@ export default function App() {
   };
 
   return (
-    <div className="flex h-screen bg-[#0a0a0c] text-zinc-300 font-sans selection:bg-emerald-500/30 select-none">
+    <div className="flex h-screen bg-[#0a0510] text-zinc-300 font-sans selection:bg-yellow-500/30 select-none overflow-hidden relative">
+      {/* Background Layer (Fixed) */}
+      <div className="fixed inset-0 z-0 pointer-events-none flex justify-center bg-black overflow-hidden">
+        <div 
+          className="h-full w-full bg-center bg-no-repeat transition-transform duration-75 ease-out"
+          style={{ 
+            backgroundImage: `url(${ASSETS_BASE_URL}${currentBg})`,
+            backgroundSize: 'auto 100%',
+            transform: `translateX(${-cameraX}px)`
+          }}
+        />
+      </div>
+
       {/* --- Left Sidebar: Action List --- */}
       <motion.div 
         initial={false}
-        animate={{ width: isLeftSidebarOpen ? 256 : 0 }}
-        className="border-r border-white/5 flex flex-col bg-[#0f0f12] overflow-hidden relative"
+        animate={{ width: isLeftSidebarOpen ? 300 : 0 }}
+        className="border-r border-white/5 flex flex-col bg-[#150a20]/90 backdrop-blur-md overflow-hidden relative z-10"
       >
-        <div className="p-6 border-b border-white/5 flex items-center justify-between">
+        <div className="p-6 border-b border-white/5 flex items-center justify-between gap-8">
           <h1 className="text-xl font-bold tracking-tighter text-white flex items-center gap-2 whitespace-nowrap">
-            <Activity className="w-5 h-5 text-emerald-500" />
+            <Activity className="w-5 h-5 text-yellow-400" />
             RIKA PLAYGROUND
           </h1>
           <button 
             onClick={() => setIsLeftSidebarOpen(false)}
-            className="p-1 hover:bg-white/5 rounded text-zinc-500 hover:text-white transition-colors"
+            className="p-1 hover:bg-white/5 rounded text-zinc-500 hover:text-white transition-colors flex-shrink-0"
           >
             <PanelLeftClose className="w-4 h-4" />
           </button>
         </div>
         
-        <div className="w-64 flex-1 overflow-y-auto p-4 space-y-4 scrollbar-hide">
+        <div className="w-[300px] flex-1 overflow-y-auto p-4 space-y-4 scrollbar-hide">
           {INITIAL_ACTIONS.map(type => (
             <div 
               key={type}
@@ -588,7 +732,7 @@ export default function App() {
               }}
               className={`group cursor-pointer rounded-xl border p-3 transition-all ${
                 selectedAction === type 
-                  ? 'bg-emerald-500/10 border-emerald-500/50' 
+                  ? 'bg-yellow-400/10 border-yellow-400/50' 
                   : 'bg-white/5 border-transparent hover:bg-white/10'
               }`}
             >
@@ -608,7 +752,7 @@ export default function App() {
                     return null;
                   })()}
                 </div>
-                <ChevronRight className={`w-4 h-4 transition-transform ${selectedAction === type ? 'rotate-90 text-emerald-500' : 'text-zinc-600'}`} />
+                <ChevronRight className={`w-4 h-4 transition-transform ${selectedAction === type ? 'rotate-90 text-yellow-400' : 'text-zinc-600'}`} />
               </div>
               
               <div className="aspect-square bg-black/40 rounded-lg flex items-center justify-center overflow-hidden border border-white/5">
@@ -626,14 +770,14 @@ export default function App() {
                     value={actions[type].fps}
                     onChange={(e) => updateAction(type, { fps: parseInt(e.target.value) })}
                     onClick={(e) => e.stopPropagation()}
-                    className="flex-1 h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-emerald-500 select-text"
+                    className="flex-1 h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-yellow-400 select-text"
                   />
-                  <span className="text-[10px] font-mono text-emerald-500 w-4">{actions[type].fps}</span>
+                  <span className="text-[10px] font-mono text-yellow-400 w-4">{actions[type].fps}</span>
                 </div>
 
                 {type === 'jump' && (
                   <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                    <span className="text-[10px] font-mono text-zinc-500">MID</span>
+                    <span className="text-[10px] font-mono text-zinc-500">{t.jumpMid}</span>
                     <input 
                       type="range" 
                       min="1" 
@@ -641,9 +785,9 @@ export default function App() {
                       step="1"
                       value={actions['jump'].jumpMidPoint}
                       onChange={(e) => updateAction('jump', { jumpMidPoint: parseInt(e.target.value) })}
-                      className="flex-1 h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-emerald-500 select-text"
+                      className="flex-1 h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-yellow-400 select-text"
                     />
-                    <span className="text-[10px] font-mono text-emerald-500 w-4">{actions['jump'].jumpMidPoint}</span>
+                    <span className="text-[10px] font-mono text-yellow-400 w-4">{actions['jump'].jumpMidPoint}</span>
                   </div>
                 )}
               </div>
@@ -654,21 +798,40 @@ export default function App() {
 
       {/* --- Main Area --- */}
       <div className="flex-1 flex flex-col relative overflow-hidden">
+        {/* Top Bar: Language Toggle */}
+        <div className="absolute top-8 right-8 z-50 flex items-center gap-4">
+          <div className="bg-[#150a20]/80 backdrop-blur-md border border-white/10 rounded-xl p-1 flex items-center gap-1 shadow-xl">
+            <button 
+              onClick={() => setLanguage('en')}
+              className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all ${language === 'en' ? 'bg-yellow-400 text-black shadow-lg' : 'text-zinc-500 hover:text-white'}`}
+            >
+              EN
+            </button>
+            <button 
+              onClick={() => setLanguage('zh')}
+              className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all ${language === 'zh' ? 'bg-yellow-400 text-black shadow-lg' : 'text-zinc-500 hover:text-white'}`}
+            >
+              ZH
+            </button>
+          </div>
+
+          {!isRightSidebarOpen && (
+            <button 
+              onClick={() => setIsRightSidebarOpen(true)}
+              className="p-3 bg-[#150a20]/80 backdrop-blur-md border border-white/10 rounded-xl text-zinc-400 hover:text-white shadow-xl transition-all hover:scale-105"
+            >
+              <PanelRightOpen className="w-6 h-6" />
+            </button>
+          )}
+        </div>
+
         {/* Sidebar Toggle Buttons (when closed) */}
         {!isLeftSidebarOpen && (
           <button 
             onClick={() => setIsLeftSidebarOpen(true)}
-            className="absolute top-8 left-8 z-50 p-3 bg-[#0a0a0c] border border-white/10 rounded-xl text-zinc-400 hover:text-white shadow-xl transition-all hover:scale-105"
+            className="absolute top-8 left-8 z-50 p-3 bg-[#150a20]/80 backdrop-blur-md border border-white/10 rounded-xl text-zinc-400 hover:text-white shadow-xl transition-all hover:scale-105"
           >
             <PanelLeftOpen className="w-6 h-6" />
-          </button>
-        )}
-        {!isRightSidebarOpen && (
-          <button 
-            onClick={() => setIsRightSidebarOpen(true)}
-            className="absolute top-8 right-8 z-50 p-3 bg-[#0a0a0c] border border-white/10 rounded-xl text-zinc-400 hover:text-white shadow-xl transition-all hover:scale-105"
-          >
-            <PanelRightOpen className="w-6 h-6" />
           </button>
         )}
 
@@ -693,8 +856,8 @@ export default function App() {
                   <ChevronRight className="w-6 h-6 rotate-180" />
                 </button>
                 <div>
-                  <h2 className="text-3xl font-bold text-white capitalize">{selectedAction} Editor</h2>
-                  <p className="text-zinc-500 text-sm">Configure your sprite sheet and frame sequence</p>
+                  <h2 className="text-3xl font-bold text-white capitalize">{selectedAction} {t.editor}</h2>
+                  <p className="text-zinc-500 text-sm">{t.configureSprite}</p>
                 </div>
               </div>
 
@@ -714,8 +877,8 @@ export default function App() {
               {/* Frame Strip */}
               <div className="mt-12">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-sm font-bold uppercase tracking-widest text-zinc-500">Frame Sequence</h3>
-                  <span className="text-xs font-mono text-zinc-600">{actions[selectedAction].frames.length} total frames</span>
+                  <h3 className="text-sm font-bold uppercase tracking-widest text-zinc-500">{t.frameSequence}</h3>
+                  <span className="text-xs font-mono text-zinc-600">{actions[selectedAction].frames.length} {t.totalFrames}</span>
                 </div>
                 <div className="flex gap-3 overflow-x-auto pb-4 scrollbar-hide">
                   {actions[selectedAction].frames.slice(0, actions[selectedAction].maxFrames).map((frame, idx) => (
@@ -726,7 +889,7 @@ export default function App() {
                         setIsPlaying(false);
                       }}
                       className={`relative flex-shrink-0 rounded-lg border flex items-center justify-center bg-black/20 overflow-hidden transition-all cursor-pointer group/frame aspect-square h-[100px] ${
-                        editorFrameIndex === idx ? 'ring-2 ring-emerald-500 border-emerald-500' : ''
+                        editorFrameIndex === idx ? 'ring-2 ring-yellow-400 border-yellow-400' : ''
                       } ${
                         frame.masked ? 'border-red-500/50' : 'border-white/10 hover:border-white/30'
                       }`}
@@ -772,28 +935,20 @@ export default function App() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               ref={gameContainerRef}
-              className="flex-1 relative bg-[#050507]"
+              className="fixed inset-0 pointer-events-none"
             >
-              {/* Game Map Background */}
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div 
-                  className="relative w-full h-full bg-center bg-cover bg-no-repeat transition-all duration-500"
-                  style={{ backgroundImage: `url(${ASSETS_BASE_URL}bg1.png)` }}
-                />
-              </div>
-
               {/* Character */}
               <div 
-                className="absolute left-1/2"
+                className="absolute left-1/2 pointer-events-auto"
                 style={{ 
                   bottom: `${128 - gameParams.horizonOffset}px`,
-                  transform: `translate(calc(-50% + ${charPos.x}px), ${charPos.y}px)` 
+                  transform: `translate(calc(-50% + ${charPos.x - cameraX}px), ${charPos.y}px)` 
                 }}
               >
                 {renderSprite(charState, currentFrameIndex, 1, charDir, false, 256 * gameParams.charScale)}
                 
                 {/* Hitbox Overlay */}
-                {actions['idle'].spriteSheetUrl && actions['idle'].hitbox && (
+                {gameParams.showCollisionBox && actions['idle'].spriteSheetUrl && actions['idle'].hitbox && (
                   <HitboxOverlay 
                     hitbox={actions['idle'].hitbox!}
                     frame={actions['idle'].frames[0] || { width: 150, height: 200 }}
@@ -821,29 +976,44 @@ export default function App() {
                 
                 {/* Debug Info */}
                 <div className="absolute -top-12 left-1/2 -translate-x-1/2 whitespace-nowrap bg-black/80 px-2 py-1 rounded text-[10px] font-mono border border-white/10">
-                  <span className="text-emerald-500">{charState}</span> | F:{currentFrameIndex}
+                  <span className="text-yellow-400">{charState}</span> | F:{currentFrameIndex}
                 </div>
               </div>
 
               {/* Controls Overlay */}
-              <div className="absolute bottom-8 left-8 flex gap-4">
-                <div className="flex flex-col gap-1">
-                  <div className="flex gap-1 justify-center">
-                    <kbd className="px-2 py-1 bg-white/10 rounded border border-white/10 text-[10px]">W</kbd>
+              <div className="absolute bottom-8 left-8 flex gap-6 items-center">
+                <div className="flex gap-3">
+                  <div className="flex flex-col items-center gap-1">
+                    <kbd className={`px-2 py-1 rounded border text-[10px] min-w-[40px] text-center transition-all ${activeKeys.has('a') || activeKeys.has('arrowleft') ? 'bg-yellow-400 border-yellow-300 text-black shadow-[0_0_10px_rgba(250,204,21,0.5)]' : 'bg-white/10 border-white/10 text-zinc-400'}`}>A / ←</kbd>
                   </div>
+                  <div className="flex flex-col items-center gap-1">
+                    <kbd className={`px-2 py-1 rounded border text-[10px] min-w-[40px] text-center transition-all ${activeKeys.has('d') || activeKeys.has('arrowright') ? 'bg-yellow-400 border-yellow-300 text-black shadow-[0_0_10px_rgba(250,204,21,0.5)]' : 'bg-white/10 border-white/10 text-zinc-400'}`}>D / →</kbd>
+                  </div>
+                </div>
+
+                <div className="h-6 w-px bg-white/10" />
+
+                <div className="flex gap-2">
+                  <kbd className={`px-3 py-1 rounded border text-[10px] transition-all ${activeKeys.has(' ') ? 'bg-yellow-400 border-yellow-300 text-black shadow-[0_0_10px_rgba(250,204,21,0.5)]' : 'bg-white/10 border-white/10 text-zinc-400'}`}>SPACE ({t.jump})</kbd>
+                  <kbd className={`px-3 py-1 rounded border text-[10px] transition-all ${activeKeys.has('shift') ? 'bg-yellow-400 border-yellow-300 text-black shadow-[0_0_10px_rgba(250,204,21,0.5)]' : 'bg-white/10 border-white/10 text-zinc-400'}`}>SHIFT ({t.run})</kbd>
+                </div>
+
+                <div className="h-6 w-px bg-white/10" />
+
+                <div className="flex gap-2">
+                  <kbd className={`px-3 py-1 rounded border text-[10px] transition-all ${activeKeys.has('j') ? 'bg-yellow-400 border-yellow-300 text-black shadow-[0_0_10px_rgba(250,204,21,0.5)]' : 'bg-white/10 border-white/10 text-zinc-400'}`}>J ({t.attack})</kbd>
+                  <kbd className={`px-3 py-1 rounded border text-[10px] transition-all ${activeKeys.has('h') ? 'bg-yellow-400 border-yellow-300 text-black shadow-[0_0_10px_rgba(250,204,21,0.5)]' : 'bg-white/10 border-white/10 text-zinc-400'}`}>H ({t.hit})</kbd>
+                </div>
+
+                <div className="h-6 w-px bg-white/10" />
+
+                <div className="flex gap-2 items-center">
+                  <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-tighter mr-1">{t.special}</span>
                   <div className="flex gap-1">
-                    <kbd className="px-2 py-1 bg-white/10 rounded border border-white/10 text-[10px]">A</kbd>
-                    <kbd className="px-2 py-1 bg-white/10 rounded border border-white/10 text-[10px]">S</kbd>
-                    <kbd className="px-2 py-1 bg-white/10 rounded border border-white/10 text-[10px]">D</kbd>
+                    {[1, 2, 3, 4].map(n => (
+                      <kbd key={n} className={`px-2 py-1 rounded border text-[10px] min-w-[24px] text-center transition-all ${activeKeys.has(n.toString()) ? 'bg-yellow-400 border-yellow-300 text-black shadow-[0_0_10px_rgba(250,204,21,0.5)]' : 'bg-white/10 border-white/10 text-zinc-400'}`}>{n}</kbd>
+                    ))}
                   </div>
-                </div>
-                <div className="flex flex-col gap-1">
-                   <kbd className="px-4 py-1 bg-white/10 rounded border border-white/10 text-[10px]">SPACE (Jump)</kbd>
-                   <kbd className="px-4 py-1 bg-white/10 rounded border border-white/10 text-[10px]">SHIFT (Run)</kbd>
-                </div>
-                <div className="flex flex-col gap-1">
-                   <kbd className="px-4 py-1 bg-white/10 rounded border border-white/10 text-[10px]">J (Attack)</kbd>
-                   <kbd className="px-4 py-1 bg-white/10 rounded border border-white/10 text-[10px]">H (Hit)</kbd>
                 </div>
               </div>
             </motion.div>
@@ -855,11 +1025,11 @@ export default function App() {
       <motion.div 
         initial={false}
         animate={{ width: isRightSidebarOpen ? 320 : 0 }}
-        className="border-l border-white/5 bg-[#0f0f12] overflow-hidden relative"
+        className="border-l border-white/5 bg-[#150a20]/90 backdrop-blur-md overflow-hidden relative z-10"
       >
         <div className="w-80 h-full p-6 flex flex-col gap-8 overflow-y-auto scrollbar-hide">
           <div className="flex items-center justify-between">
-            <h2 className="text-xl font-bold text-white">Parameters</h2>
+            <h2 className="text-xl font-bold text-white">{t.parameters}</h2>
             <button 
               onClick={() => setIsRightSidebarOpen(false)}
               className="p-1 hover:bg-white/5 rounded text-zinc-500 hover:text-white transition-colors"
@@ -873,7 +1043,7 @@ export default function App() {
             <div className="space-y-8">
             <section>
               <h3 className="text-xs font-bold uppercase tracking-widest text-zinc-500 mb-4 flex items-center gap-2">
-                <Upload className="w-4 h-4" /> Sprite Sheet
+                <Upload className="w-4 h-4" /> {t.spriteSheet}
               </h3>
               {actions[selectedAction].spriteSheetUrl ? (
                 <div className="relative group rounded-xl overflow-hidden border border-white/10 bg-black/40 h-32 flex items-center justify-center">
@@ -890,10 +1060,10 @@ export default function App() {
                   </button>
                 </div>
               ) : (
-                <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-white/10 rounded-xl cursor-pointer hover:bg-white/5 hover:border-emerald-500/50 transition-all">
+                <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-white/10 rounded-xl cursor-pointer hover:bg-white/5 hover:border-yellow-400/50 transition-all">
                   <div className="flex flex-col items-center justify-center pt-5 pb-6">
                     <Upload className="w-8 h-8 text-zinc-500 mb-2" />
-                    <p className="text-xs text-zinc-500">Click to upload</p>
+                    <p className="text-xs text-zinc-500">{t.clickToUpload}</p>
                   </div>
                   <input 
                     type="file" 
@@ -907,35 +1077,35 @@ export default function App() {
 
             <section className="space-y-4">
               <h3 className="text-xs font-bold uppercase tracking-widest text-zinc-500 mb-4 flex items-center gap-2">
-                <Layers className="w-4 h-4" /> Splitting
+                <Layers className="w-4 h-4" /> {t.splitting}
               </h3>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="text-[10px] text-zinc-500 uppercase">Columns</label>
+                  <label className="text-[10px] text-zinc-500 uppercase">{t.columns}</label>
                   <input 
                     type="number" 
                     min="1"
                     value={actions[selectedAction].columns}
                     onChange={(e) => splitSpriteSheet(selectedAction, parseInt(e.target.value) || 1, actions[selectedAction].rows)}
-                    className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500 select-text"
+                    className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-yellow-400 select-text"
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] text-zinc-500 uppercase">Rows</label>
+                  <label className="text-[10px] text-zinc-500 uppercase">{t.rows}</label>
                   <input 
                     type="number" 
                     min="1"
                     value={actions[selectedAction].rows}
                     onChange={(e) => splitSpriteSheet(selectedAction, actions[selectedAction].columns, parseInt(e.target.value) || 1)}
-                    className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500 select-text"
+                    className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-yellow-400 select-text"
                   />
                 </div>
               </div>
               
               <div className="space-y-2 pt-2">
                 <div className="flex justify-between items-center">
-                  <label className="text-[10px] text-zinc-500 uppercase">Frame Count</label>
-                  <span className="text-xs font-mono text-emerald-500">{actions[selectedAction].maxFrames}</span>
+                  <label className="text-[10px] text-zinc-500 uppercase">{t.frameCount}</label>
+                  <span className="text-xs font-mono text-yellow-400">{actions[selectedAction].maxFrames}</span>
                 </div>
                 <input 
                   type="range" 
@@ -944,38 +1114,57 @@ export default function App() {
                   step="1"
                   value={actions[selectedAction].maxFrames}
                   onChange={(e) => updateAction(selectedAction, { maxFrames: parseInt(e.target.value) })}
-                  className="w-full h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-emerald-500 select-text"
+                  className="w-full h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-yellow-400 select-text"
                 />
               </div>
+
+              {/* Special Action Speed */}
+              {selectedAction?.startsWith('special') && (
+                <div className="space-y-2 pt-4 border-t border-white/5">
+                  <div className="flex justify-between items-center">
+                    <label className="text-[10px] text-zinc-500 uppercase">{t.movementSpeed}</label>
+                    <span className="text-xs font-mono text-yellow-400">{actions[selectedAction].speed}</span>
+                  </div>
+                  <input 
+                    type="range" 
+                    min="-10" 
+                    max="10" 
+                    step="1"
+                    value={actions[selectedAction].speed || 0}
+                    onChange={(e) => updateAction(selectedAction, { speed: parseFloat(e.target.value) })}
+                    className="w-full h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-yellow-400 select-text"
+                  />
+                </div>
+              )}
             </section>
 
             {/* Jump Midpoint removed from here */}
             <button 
               onClick={() => setIsPlaying(!isPlaying)}
               className={`w-full py-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all ${
-                isPlaying ? 'bg-zinc-800 text-white hover:bg-zinc-700' : 'bg-emerald-500 text-black hover:bg-emerald-400'
+                isPlaying ? 'bg-zinc-800 text-white hover:bg-zinc-700' : 'bg-yellow-400 text-black hover:bg-yellow-300'
               }`}
             >
               {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
-              {isPlaying ? 'PAUSE PREVIEW' : 'PLAY PREVIEW'}
+              {isPlaying ? t.pausePreview : t.playPreview}
             </button>
           </div>
         ) : (
           /* Game Parameters */
-          <div className="space-y-8 overflow-y-auto">
+          <div className="space-y-8 overflow-y-auto scrollbar-hide">
             <section>
               <h3 className="text-xs font-bold uppercase tracking-widest text-zinc-500 mb-4 flex items-center gap-2">
-                <Settings2 className="w-4 h-4" /> Character Params
+                <Settings2 className="w-4 h-4" /> {t.characterParams}
               </h3>
               <div className="space-y-6">
                 {[
-                  { label: 'Display Scale', key: 'charScale', min: 0.25, max: 4, step: 0.05 },
-                  { label: 'Horizon Offset', key: 'horizonOffset', min: -1000, max: 1000, step: 10 },
+                  { label: t.displayScale, key: 'charScale', min: 0.25, max: 4, step: 0.05 },
+                  { label: t.horizonOffset, key: 'horizonOffset', min: -1000, max: 1000, step: 10 },
                 ].map(param => (
                   <div key={param.key} className="space-y-2">
                     <div className="flex justify-between items-center">
                       <label className="text-[10px] text-zinc-500 uppercase">{param.label}</label>
-                      <span className="text-xs font-mono text-emerald-500">{(gameParams as any)[param.key]}</span>
+                      <span className="text-xs font-mono text-yellow-400">{(gameParams as any)[param.key]}</span>
                     </div>
                     <input 
                       type="range" 
@@ -984,29 +1173,40 @@ export default function App() {
                       step={param.step || 1}
                       value={(gameParams as any)[param.key]}
                       onChange={(e) => setGameParams(prev => ({ ...prev, [param.key]: parseFloat(e.target.value) }))}
-                      className="w-full h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-emerald-500 select-text"
+                      className="w-full h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-yellow-400 select-text"
                     />
                   </div>
                 ))}
+
+                {/* Collision Box Toggle */}
+                <div className="flex items-center justify-between pt-2">
+                  <label className="text-[10px] text-zinc-500 uppercase">{t.showCollisionBox}</label>
+                  <button 
+                    onClick={() => setGameParams(prev => ({ ...prev, showCollisionBox: !prev.showCollisionBox }))}
+                    className={`w-10 h-5 rounded-full transition-colors relative ${gameParams.showCollisionBox ? 'bg-yellow-400' : 'bg-zinc-800'}`}
+                  >
+                    <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${gameParams.showCollisionBox ? 'left-6' : 'left-1'}`} />
+                  </button>
+                </div>
               </div>
             </section>
 
             <section>
               <h3 className="text-xs font-bold uppercase tracking-widest text-zinc-500 mb-4 flex items-center gap-2">
-                <Activity className="w-4 h-4" /> Physics Params
+                <Activity className="w-4 h-4" /> {t.physicsParams}
               </h3>
               
               <div className="space-y-6">
                 {[
-                  { label: 'Walk Speed', key: 'walkSpeed', min: 1, max: 10 },
-                  { label: 'Run Speed', key: 'runSpeed', min: 1, max: 20 },
-                  { label: 'Jump Power', key: 'jumpVelocity', min: 5, max: 30 },
-                  { label: 'Gravity', key: 'gravity', min: 0.1, max: 2, step: 0.1 },
+                  { label: t.walkSpeed, key: 'walkSpeed', min: 1, max: 8 },
+                  { label: t.runSpeed, key: 'runSpeed', min: 1, max: 12 },
+                  { label: t.jumpPower, key: 'jumpVelocity', min: 5, max: 24 },
+                  { label: t.gravity, key: 'gravity', min: 0.1, max: 1.5, step: 0.1 },
                 ].map(param => (
                   <div key={param.key} className="space-y-2">
                     <div className="flex justify-between items-center">
                       <label className="text-[10px] text-zinc-500 uppercase">{param.label}</label>
-                      <span className="text-xs font-mono text-emerald-500">
+                      <span className="text-xs font-mono text-yellow-400">
                         {param.key === 'jumpVelocity' ? Math.abs((gameParams as any)[param.key]) : (gameParams as any)[param.key]}
                       </span>
                     </div>
@@ -1023,24 +1223,40 @@ export default function App() {
                           [param.key]: param.key === 'jumpVelocity' ? -val : val 
                         }));
                       }}
-                      className="w-full h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-emerald-500 select-text"
+                      className="w-full h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-yellow-400 select-text"
                     />
                   </div>
                 ))}
               </div>
             </section>
 
-            <div className="p-4 bg-emerald-500/5 border border-emerald-500/20 rounded-xl">
-              <h4 className="text-[10px] font-bold text-emerald-500 uppercase mb-2 flex items-center gap-2">
-                <Gamepad2 className="w-3 h-3" /> State Machine
-              </h4>
-              <ul className="text-[10px] text-zinc-500 space-y-1 list-disc pl-3">
-                <li>Jump/Hit are uninterruptible</li>
-                <li>Attack can be interrupted by Hit</li>
-                <li>Cannot move while Attacking</li>
-                <li>Jump allows air movement</li>
-              </ul>
-            </div>
+            <section>
+              <h3 className="text-xs font-bold uppercase tracking-widest text-zinc-500 mb-4 flex items-center gap-2">
+                <ImageIcon className="w-4 h-4" /> {t.backgroundSelection}
+              </h3>
+              <div className="grid grid-cols-3 gap-2">
+                {['bg2.png', 'bg3.png', 'bg4.png'].map(bg => (
+                  <button 
+                    key={bg}
+                    onClick={() => setCurrentBg(bg)}
+                    className={`relative aspect-video rounded-lg overflow-hidden border-2 transition-all ${currentBg === bg ? 'border-yellow-400 ring-2 ring-yellow-400/20' : 'border-white/5 hover:border-white/20'}`}
+                  >
+                    <img 
+                      src={`${ASSETS_BASE_URL}${bg}`} 
+                      className="w-full h-full object-cover"
+                      referrerPolicy="no-referrer"
+                    />
+                    {currentBg === bg && (
+                      <div className="absolute inset-0 bg-yellow-400/10 flex items-center justify-center">
+                        <div className="bg-yellow-400 text-black p-0.5 rounded-full">
+                          <Check className="w-3 h-3" />
+                        </div>
+                      </div>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </section>
           </div>
         )}
       </div>
