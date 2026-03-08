@@ -22,7 +22,10 @@ import {
   PanelRightOpen,
   Image as ImageIcon,
   Check,
-  Languages
+  Languages,
+  Github,
+  Star,
+  ExternalLink
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ActionType, ActionConfig, Frame, GameParams } from './types';
@@ -255,8 +258,21 @@ export default function App() {
   const [currentBg, setCurrentBg] = useState('bg3.png');
   const [activeKeys, setActiveKeys] = useState<Set<string>>(new Set());
   const [language, setLanguage] = useState<'en' | 'zh'>('en');
+  const [starCount, setStarCount] = useState<number | null>(null);
 
   const t = TRANSLATIONS[language];
+
+  // Fetch GitHub stars
+  useEffect(() => {
+    fetch('https://api.github.com/repos/theamusing/Rika-Playground')
+      .then(res => res.json())
+      .then(data => {
+        if (data.stargazers_count !== undefined) {
+          setStarCount(data.stargazers_count);
+        }
+      })
+      .catch(err => console.error('Failed to fetch stars:', err));
+  }, []);
 
   // Load background dimensions
   useEffect(() => {
@@ -798,8 +814,40 @@ export default function App() {
 
       {/* --- Main Area --- */}
       <div className="flex-1 flex flex-col relative overflow-hidden">
-        {/* Top Bar: Language Toggle */}
-        <div className="absolute top-8 right-8 z-50 flex items-center gap-4">
+        {/* Top Bar: Language Toggle & External Links */}
+        <div className="absolute top-8 right-8 z-50 flex items-center gap-3">
+          {/* Rika AI Link */}
+          <a 
+            href="https://rika-ai.com" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="bg-[#150a20]/80 border border-white/10 rounded-xl p-2 flex items-center justify-center shadow-xl hover:bg-zinc-900 transition-all hover:scale-105 group"
+            title="Rika AI"
+          >
+            <img 
+              src="https://cdn.rika-ai.com/assets/frontpage/icons/rika.png" 
+              alt="Rika AI" 
+              className="w-6 h-6 object-contain"
+              referrerPolicy="no-referrer"
+            />
+          </a>
+
+          {/* GitHub Link */}
+          <a 
+            href="https://github.com/theamusing/Rika-Playground" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="bg-[#150a20]/80 border border-white/10 rounded-xl p-2 flex items-center gap-2 shadow-xl hover:bg-zinc-900 transition-all hover:scale-105 group"
+          >
+            <Github className="w-6 h-6 text-white" />
+            {starCount !== null && (
+              <div className="flex items-center gap-1 pr-1 border-l border-white/10 pl-2">
+                <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />
+                <span className="text-[10px] font-bold text-white">{starCount}</span>
+              </div>
+            )}
+          </a>
+
           <div className="bg-[#150a20]/80 backdrop-blur-md border border-white/10 rounded-xl p-1 flex items-center gap-1 shadow-xl">
             <button 
               onClick={() => setLanguage('en')}
