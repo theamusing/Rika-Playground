@@ -6,8 +6,8 @@ import {defineConfig, loadEnv} from 'vite';
 export default defineConfig(({mode}) => {
   const env = loadEnv(mode, '.', '');
   return {
+    base: '/Rika-Playground/',
     plugins: [react(), tailwindcss()],
-    // base: '/your-repo-name/', // 如果部署到 https://<username>.github.io/<repo-name>/，请取消注释并修改
     define: {
       'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
     },
